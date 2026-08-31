@@ -1,32 +1,61 @@
-name: Build UWP
+name: Build Pronote Lumia
 
 on:
   push:
     branches:
       - main
       - master
+
   pull_request:
 
 jobs:
   build:
     runs-on: windows-2022
 
+    env:
+      SOLUTION: PronoteLumia.sln
+      CONFIGURATION: Release
+      PLATFORM: ARM
+
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Restore NuGet
-        run: nuget restore PronoteLumia.sln
+      - name: Check Windows SDK
+        shell: powershell
+        run: |
+          Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Lib" |
+            Select-Object Name
+
+      - name: Restore
+        shell: powershell
+        run: |
+          msbuild "$env:SOLUTION" `
+            /t:Restore `
+            /p:Configuration=$env:CONFIGURATION `
+            /p:Platform=$env:PLATFORM
 
       - name: Build ARM
-        run: msbuild PronoteLumia.sln /p:Configuration=Release /p:Platform=ARM /p:AppxPackageSigningEnabled=false
+        shell: powershell
+        run: |
+          msbuild "$env:SOLUTION" `
+            /p:Configuration=$env:CONFIGURATION `
+            /p:Platform=$env:PLATFORM `
+            /p:AppxPackageSigningEnabled=false `
+            /p:AppxBundle=Never `
+            /p:GenerateAppxPackageOnBuild=true `
+            /p:UapAppxPackageBuildMode=SideloadOnly `
+            /p:AppxPackageDir="$env:GITHUB_WORKSPACE\Packages\"
 
-      - name: Upload build
+      - name: Upload ARM package
         uses: actions/upload-artifact@v4
         with:
           name: PronoteLumia-ARM
           path: |
-            **/bin/ARM/Release/**
+            Packages/**
+            PronoteLumia/bin/ARM/Release/**
+          if-no-files-found: error
