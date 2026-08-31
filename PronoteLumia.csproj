@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project ToolsVersion="15.0"
+         DefaultTargets="Build"
+         xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props"
           Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
@@ -11,29 +13,21 @@
     <ProjectGuid>{7A7D7B4E-5F6B-4A2D-9D2A-8E6C6D9B4A11}</ProjectGuid>
 
     <OutputType>AppContainerExe</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>PronoteLumia</RootNamespace>
     <AssemblyName>PronoteLumia</AssemblyName>
 
     <DefaultLanguage>fr-FR</DefaultLanguage>
 
+    <!-- Windows 10 Mobile 1709 -->
     <TargetPlatformIdentifier>UAP</TargetPlatformIdentifier>
     <TargetPlatformVersion>10.0.16299.0</TargetPlatformVersion>
     <TargetPlatformMinVersion>10.0.16299.0</TargetPlatformMinVersion>
 
     <MinimumVisualStudioVersion>15.0</MinimumVisualStudioVersion>
 
-    <EnableDefaultApplicationIcon>True</EnableDefaultApplicationIcon>
-    <AppxPackageSigningEnabled>False</AppxPackageSigningEnabled>
-
-    <PackageCertificateThumbprint>
-    </PackageCertificateThumbprint>
-
-    <AppxAutoIncrementPackageRevision>True</AppxAutoIncrementPackageRevision>
-    <GenerateAppInstallerFile>False</GenerateAppInstallerFile>
+    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+    <GenerateAppInstallerFile>false</GenerateAppInstallerFile>
     <AppxBundle>Never</AppxBundle>
-
-    <AppxBundlePlatforms>ARM</AppxBundlePlatforms>
 
     <Platforms>ARM</Platforms>
 
@@ -42,6 +36,7 @@
     <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
   </PropertyGroup>
 
+  <!-- DEBUG ARM -->
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|ARM'">
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
@@ -51,6 +46,7 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
 
+  <!-- RELEASE ARM -->
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|ARM'">
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
@@ -59,6 +55,7 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
 
+  <!-- CODE C# -->
   <ItemGroup>
     <Compile Include="App.xaml.cs">
       <DependentUpon>App.xaml</DependentUpon>
@@ -71,6 +68,7 @@
     <Compile Include="PronoteClient.cs" />
   </ItemGroup>
 
+  <!-- XAML -->
   <ItemGroup>
     <ApplicationDefinition Include="App.xaml">
       <Generator>MSBuild:Compile</Generator>
@@ -83,16 +81,19 @@
     </Page>
   </ItemGroup>
 
+  <!-- ASSETS -->
   <ItemGroup>
     <Content Include="Assets\**" />
   </ItemGroup>
 
+  <!-- MANIFEST -->
   <ItemGroup>
     <None Include="Package.appxmanifest">
       <SubType>Designer</SubType>
     </None>
   </ItemGroup>
 
+  <!-- UWP TARGETS -->
   <Import Project="$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v$(VisualStudioVersion)\WindowsXaml\Microsoft.Windows.UI.Xaml.CSharp.targets" />
 
   <Target Name="BeforeBuild">
