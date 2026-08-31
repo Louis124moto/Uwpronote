@@ -19,85 +19,92 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Installer Visual Studio UWP
+      # Installer les composants UWP nécessaires au projet
+      - name: Installer les outils UWP
         shell: powershell
         run: |
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
+          $vsInstaller = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe"
 
-          $installationPath = & $vswhere `
-            -latest `
-            -products * `
-            -property installationPath
-
-          if (-not $installationPath) {
-            Write-Error "Visual Studio introuvable."
+          if (!(Test-Path $vsInstaller)) {
+            Write-Error "Visual Studio Installer introuvable."
             exit 1
           }
 
-          Write-Host "Visual Studio : $installationPath"
+          Write-Host "Installation des composants UWP..."
 
-          & $installer modify `
-            --installPath "$installationPath" `
-            --add Microsoft.VisualStudio.Workload.Universal `
+          & $vsInstaller modify `
+            --installPath "C:\Program Files\Microsoft Visual Studio\2022\Enterprise" `
             --add Microsoft.VisualStudio.ComponentGroup.UWP.Support `
-            --add Microsoft.VisualStudio.Component.Windows10SDK.16299 `
+            --add Microsoft.VisualStudio.Component.Windows10SDK.19041 `
+            --add Microsoft.VisualStudio.Component.Windows10SDK.18362 `
             --quiet `
             --norestart `
             --wait
 
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "Installation du workload UWP échouée."
+            Write-Error "Échec de l'installation des composants UWP."
             exit $LASTEXITCODE
           }
 
-      - name: Vérifier Windows XAML
+      # Vérification du fichier XAML requis par le vieux projet UWP
+      - name: Vérifier les outils UWP XAML
         shell: powershell
         run: |
-          Write-Host "Recherche des targets Windows XAML..."
+          $targets = @(
+            "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Microsoft\VisualStudio\v17.0\WindowsXaml\Microsoft.Windows.UI.Xaml.CSharp.targets",
+            "C:\Program Files (x86)\MSBuild\Microsoft\VisualStudio\v17.0\WindowsXaml\Microsoft.Windows.UI.Xaml.CSharp.targets"
+          )
 
-          $targets = Get-ChildItem `
-            "C:\Program Files\Microsoft Visual Studio\2022" `
-            -Recurse `
-            -Filter "Microsoft.Windows.UI.Xaml.CSharp.targets" `
-            -ErrorAction SilentlyContinue
+          $found = $false
 
-          if (-not $targets) {
-            Write-Error "Microsoft.Windows.UI.Xaml.CSharp.targets introuvable."
+          foreach ($file in $targets) {
+            if (Test-Path $file) {
+              Write-Host "Trouvé : $file"
+              $found = $true
+            }
+          }
+
+          if (!$found) {
+            Write-Host "Recherche approfondie..."
+            Get-ChildItem `
+              "C:\Program Files\Microsoft Visual Studio" `
+              -Filter "Microsoft.Windows.UI.Xaml.CSharp.targets" `
+              -Recurse `
+              -ErrorAction SilentlyContinue |
+              ForEach-Object {
+                Write-Host "Trouvé : $($_.FullName)"
+                $found = $true
+              }
+          }
+
+          if (!$found) {
+            Write-Error "Microsoft.Windows.UI.Xaml.CSharp.targets est toujours introuvable."
             exit 1
           }
 
-          foreach ($target in $targets) {
-            Write-Host "TARGET TROUVEE : $($target.FullName)"
-          }
+      # Ajouter MSBuild au PATH
+      - name: Configurer MSBuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          vs-version: '[17.0,18.0)'
 
-      - name: Trouver MSBuild
+      - name: Vérifier MSBuild
         shell: powershell
         run: |
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          Write-Host "MSBuild utilisé :"
+          Get-Command msbuild
+          msbuild -version
 
-          $msbuild = & $vswhere `
-            -latest `
-            -products * `
-            -requires Microsoft.Component.MSBuild `
-            -find MSBuild\**\Bin\MSBuild.exe
-
-          if (-not $msbuild) {
-            Write-Error "MSBuild introuvable."
-            exit 1
-          }
-
-          Write-Host "MSBuild : $msbuild"
-
-          "MSBUILD_PATH=$msbuild" | Out-File `
-            -FilePath $env:GITHUB_ENV `
-            -Encoding utf8 `
-            -Append
-
+      # Build ARM + génération du package APPX
       - name: Build ARM
         shell: powershell
         run: |
-          & "$env:MSBUILD_PATH" "$env:SOLUTION" `
+          Write-Host "Compilation de $env:SOLUTION"
+          Write-Host "Configuration : $env:CONFIGURATION"
+          Write-Host "Plateforme : $env:PLATFORM"
+
+          msbuild "$env:SOLUTION" `
+            /restore `
             /p:Configuration=$env:CONFIGURATION `
             /p:Platform=$env:PLATFORM `
             /p:AppxPackageSigningEnabled=false `
@@ -110,13 +117,10 @@ jobs:
             exit $LASTEXITCODE
           }
 
-      - name: Upload AppX
+      # Récupérer le package généré
+      - name: Upload APPX
         uses: actions/upload-artifact@v4
         with:
           name: PronoteLumia-ARM
-          path: |
-            Packages/**/*.appx
-            Packages/**/*.msix
-            Packages/**/*.appxbundle
-            Packages/**/*.msixbundle
+          path: Packages/
           if-no-files-found: error
