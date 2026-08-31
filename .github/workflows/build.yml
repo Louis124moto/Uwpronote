@@ -1,12 +1,10 @@
-name: Build Pronote Lumia
+name: Build PronoteLumia
 
 on:
   push:
     branches:
       - main
-      - master
-
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
@@ -18,28 +16,49 @@ jobs:
       PLATFORM: ARM
 
     steps:
-
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Check Windows SDK
+      - name: Installer les composants UWP
         shell: powershell
         run: |
-          Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Lib" |
-            Select-Object Name
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 
-      - name: Restore
+          $installationPath = & $vswhere `
+            -latest `
+            -products * `
+            -requires Microsoft.VisualStudio.ComponentGroup.UWP.VC `
+            -property installationPath
+
+          if (-not $installationPath) {
+            $installationPath = & $vswhere `
+              -latest `
+              -products * `
+              -property installationPath
+          }
+
+          Write-Host "Visual Studio : $installationPath"
+
+          $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
+
+          & $installer modify `
+            --installPath "$installationPath" `
+            --add Microsoft.VisualStudio.ComponentGroup.UWP.VC `
+            --add Microsoft.VisualStudio.Component.Windows10SDK.16299 `
+            --quiet `
+            --norestart `
+            --wait
+
+      - name: Vérifier les targets UWP
         shell: powershell
         run: |
-          msbuild "$env:SOLUTION" `
-            /t:Restore `
-            /p:Configuration=$env:CONFIGURATION `
-            /p:Platform=$env:PLATFORM
+          Get-ChildItem `
+            "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Microsoft\VisualStudio" `
+            -Recurse `
+            -Filter "Microsoft.Windows.UI.Xaml.CSharp.targets" `
+            -ErrorAction SilentlyContinue
 
-      - name: Build ARM
+      - name: Build
         shell: powershell
         run: |
           msbuild "$env:SOLUTION" `
@@ -51,11 +70,12 @@ jobs:
             /p:UapAppxPackageBuildMode=SideloadOnly `
             /p:AppxPackageDir="$env:GITHUB_WORKSPACE\Packages\"
 
-      - name: Upload ARM package
+      - name: Upload MSIX/AppX
         uses: actions/upload-artifact@v4
         with:
           name: PronoteLumia-ARM
           path: |
-            Packages/**
-            PronoteLumia/bin/ARM/Release/**
-          if-no-files-found: error
+            Packages/**/*.appx
+            Packages/**/*.msix
+            Packages/**/*.appxbundle
+            Packages/**/*.msixbundle
