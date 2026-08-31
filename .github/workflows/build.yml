@@ -19,10 +19,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Installer les composants UWP
+      - name: Installer Visual Studio UWP
         shell: powershell
         run: |
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
 
           $installationPath = & $vswhere `
             -latest `
@@ -36,19 +37,38 @@ jobs:
 
           Write-Host "Visual Studio : $installationPath"
 
-          $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\setup.exe"
-
           & $installer modify `
             --installPath "$installationPath" `
-            --add Microsoft.VisualStudio.ComponentGroup.UWP.VC `
+            --add Microsoft.VisualStudio.Workload.Universal `
+            --add Microsoft.VisualStudio.ComponentGroup.UWP.Support `
             --add Microsoft.VisualStudio.Component.Windows10SDK.16299 `
             --quiet `
             --norestart `
             --wait
 
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "Installation des composants UWP échouée."
+            Write-Error "Installation du workload UWP échouée."
             exit $LASTEXITCODE
+          }
+
+      - name: Vérifier Windows XAML
+        shell: powershell
+        run: |
+          Write-Host "Recherche des targets Windows XAML..."
+
+          $targets = Get-ChildItem `
+            "C:\Program Files\Microsoft Visual Studio\2022" `
+            -Recurse `
+            -Filter "Microsoft.Windows.UI.Xaml.CSharp.targets" `
+            -ErrorAction SilentlyContinue
+
+          if (-not $targets) {
+            Write-Error "Microsoft.Windows.UI.Xaml.CSharp.targets introuvable."
+            exit 1
+          }
+
+          foreach ($target in $targets) {
+            Write-Host "TARGET TROUVEE : $($target.FullName)"
           }
 
       - name: Trouver MSBuild
@@ -67,38 +87,16 @@ jobs:
             exit 1
           }
 
-          Write-Host "MSBuild trouvé : $msbuild"
+          Write-Host "MSBuild : $msbuild"
 
           "MSBUILD_PATH=$msbuild" | Out-File `
             -FilePath $env:GITHUB_ENV `
             -Encoding utf8 `
             -Append
 
-      - name: Vérifier les targets UWP
+      - name: Build ARM
         shell: powershell
         run: |
-          Write-Host "Recherche de Microsoft.Windows.UI.Xaml.CSharp.targets..."
-
-          $targets = Get-ChildItem `
-            "C:\Program Files\Microsoft Visual Studio\2022" `
-            -Recurse `
-            -Filter "Microsoft.Windows.UI.Xaml.CSharp.targets" `
-            -ErrorAction SilentlyContinue
-
-          if (-not $targets) {
-            Write-Error "Les targets Windows XAML UWP sont introuvables."
-            exit 1
-          }
-
-          foreach ($target in $targets) {
-            Write-Host "Trouvé : $($target.FullName)"
-          }
-
-      - name: Build UWP LUMIA ARM
-        shell: powershell
-        run: |
-          Write-Host "Utilisation de MSBuild : $env:MSBUILD_PATH"
-
           & "$env:MSBUILD_PATH" "$env:SOLUTION" `
             /p:Configuration=$env:CONFIGURATION `
             /p:Platform=$env:PLATFORM `
@@ -112,21 +110,7 @@ jobs:
             exit $LASTEXITCODE
           }
 
-      - name: Vérifier le package
-        shell: powershell
-        run: |
-          if (-not (Test-Path "$env:GITHUB_WORKSPACE\Packages")) {
-            Write-Error "Le dossier Packages n'a pas été créé."
-            exit 1
-          }
-
-          Get-ChildItem `
-            "$env:GITHUB_WORKSPACE\Packages" `
-            -Recurse `
-            -File |
-            Select-Object FullName, Length
-
-      - name: Upload package
+      - name: Upload AppX
         uses: actions/upload-artifact@v4
         with:
           name: PronoteLumia-ARM
