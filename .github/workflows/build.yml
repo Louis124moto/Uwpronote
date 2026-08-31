@@ -1,0 +1,43 @@
+name: Build UWP W10M FCU (ARM)
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2019
+
+    steps:
+    - name: Récupération du code source
+      uses: actions/checkout@v4
+
+    - name: Configuration de MSBuild et outils Windows SDK
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Restauration des packages NuGet
+      run: nuget restore PronoteLumia.sln
+
+    - name: Compilation MSBuild pour Windows 10 Mobile (ARM)
+      run: |
+        msbuild PronoteLumia.sln /p:Configuration=Release `
+                                  /p:Platform=ARM `
+                                  /p:AppxPackageSigningEnabled=false `
+                                  /p:UapAppxPackageBuildMode=SideloadOnly `
+                                  /p:AppxBundle=Never `
+                                  /p:OutputPath="${{ github.workspace }}\build"
+
+    - name: Copie et consolidation du package Appx dans le dossier build
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force -Path "${{ github.workspace }}\build"
+        Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Include *.appx, *.appxbundle | Copy-Item -Destination "${{ github.workspace }}\build" -Force
+
+    - name: Publication du dossier build en tant qu'artefact
+      uses: actions/upload-artifact@v4
+      with:
+        name: build
+        path: ${{ github.workspace }}/build/
