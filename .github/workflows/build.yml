@@ -1,37 +1,32 @@
-name: Build UWP W10M FCU (ARM)
+name: Build UWP
 
 on:
   push:
-    branches: [ "main", "master" ]
-  workflow_dispatch:
+    branches:
+      - main
+      - master
+  pull_request:
 
 jobs:
   build:
-    runs-on: windows-2019
+    runs-on: windows-2022
 
     steps:
-    - name: Récupération du code source
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Configuration de MSBuild
-      uses: microsoft/setup-msbuild@v2
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
 
-    - name: Compilation MSBuild UWP (ARM)
-      run: |
-        msbuild PronoteLumia.csproj /p:Configuration=Release `
-                                    /p:Platform=ARM `
-                                    /p:AppxPackageSigningEnabled=false `
-                                    /p:UapAppxPackageBuildMode=SideloadOnly `
-                                    /p:AppxBundle=Never
+      - name: Restore NuGet
+        run: nuget restore PronoteLumia.sln
 
-    - name: Consolidation du binaire dans le dossier build
-      shell: pwsh
-      run: |
-        New-Item -ItemType Directory -Force -Path "${{ github.workspace }}\build"
-        Get-ChildItem -Path "${{ github.workspace }}" -Recurse -Include *.appx, *.appxbundle | Copy-Item -Destination "${{ github.workspace }}\build" -Force
+      - name: Build ARM
+        run: msbuild PronoteLumia.sln /p:Configuration=Release /p:Platform=ARM /p:AppxPackageSigningEnabled=false
 
-    - name: Publication de l'artefact build
-      uses: actions/upload-artifact@v4
-      with:
-        name: build
-        path: ${{ github.workspace }}/build/
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: PronoteLumia-ARM
+          path: |
+            **/bin/ARM/Release/**
