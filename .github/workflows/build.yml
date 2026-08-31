@@ -94,7 +94,7 @@ jobs:
             Write-Host "Trouvé : $($target.FullName)"
           }
 
-      - name: Build UWP ARM
+      - name: Build UWP LUMIA ARM
         shell: powershell
         run: |
           Write-Host "Utilisation de MSBuild : $env:MSBUILD_PATH"
