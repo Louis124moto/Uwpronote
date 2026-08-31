@@ -58,10 +58,25 @@ jobs:
             -Filter "Microsoft.Windows.UI.Xaml.CSharp.targets" `
             -ErrorAction SilentlyContinue
 
-      - name: Build
+        - name: Build
         shell: powershell
         run: |
-          msbuild "$env:SOLUTION" `
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+
+          $msbuild = & $vswhere `
+            -latest `
+            -products * `
+            -requires Microsoft.Component.MSBuild `
+            -find MSBuild\**\Bin\MSBuild.exe
+
+          if (-not $msbuild) {
+            Write-Error "MSBuild introuvable."
+            exit 1
+          }
+
+          Write-Host "MSBuild trouvé : $msbuild"
+
+          & $msbuild "$env:SOLUTION" `
             /p:Configuration=$env:CONFIGURATION `
             /p:Platform=$env:PLATFORM `
             /p:AppxPackageSigningEnabled=false `
@@ -69,6 +84,10 @@ jobs:
             /p:GenerateAppxPackageOnBuild=true `
             /p:UapAppxPackageBuildMode=SideloadOnly `
             /p:AppxPackageDir="$env:GITHUB_WORKSPACE\Packages\"
+
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
       - name: Upload MSIX/AppX
         uses: actions/upload-artifact@v4
