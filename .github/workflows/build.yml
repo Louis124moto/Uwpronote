@@ -22,77 +22,89 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: Diagnostic Visual Studio et UWP
+      - name: Detect Visual Studio
         shell: powershell
         run: |
-          Write-Host "=== Visual Studio ==="
-
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 
           if (!(Test-Path $vswhere)) {
-            Write-Error "vswhere introuvable."
+            Write-Error "vswhere.exe introuvable."
             exit 1
           }
 
-          & $vswhere -products * -latest -format json
+          $vsPath = & $vswhere `
+            -latest `
+            -products * `
+            -property installationPath
 
-          Write-Host ""
-          Write-Host "=== Recherche Microsoft.Windows.UI.Xaml.CSharp.targets ==="
-
-          $roots = @(
-            "C:\Program Files\Microsoft Visual Studio",
-            "C:\Program Files (x86)\MSBuild"
-          )
-
-          $targets = @()
-
-          foreach ($root in $roots) {
-            if (Test-Path $root) {
-              $targets += Get-ChildItem `
-                -Path $root `
-                -Filter "Microsoft.Windows.UI.Xaml.CSharp.targets" `
-                -Recurse `
-                -ErrorAction SilentlyContinue
-            }
-          }
-
-          if ($targets.Count -eq 0) {
-            Write-Host ""
-            Write-Host "Aucun fichier Microsoft.Windows.UI.Xaml.CSharp.targets trouvé."
-            Write-Host ""
-            Write-Host "=== SDK Windows installés ==="
-
-            Get-ChildItem `
-              "C:\Program Files (x86)\Windows Kits\10\bin" `
-              -Directory `
-              -ErrorAction SilentlyContinue |
-              Select-Object FullName
-
+          if (!$vsPath) {
+            Write-Error "Visual Studio introuvable."
             exit 1
           }
 
-          Write-Host ""
-          Write-Host "Fichiers trouvés :"
+          Write-Host "Visual Studio : $vsPath"
 
-          foreach ($target in $targets) {
-            Write-Host $target.FullName
-          }
+          "VS_PATH=$vsPath" | Out-File `
+            -FilePath $env:GITHUB_ENV `
+            -Encoding utf8 `
+            -Append
 
-      - name: Vérifier MSBuild
+      - name: Verify UWP XAML tools
         shell: powershell
         run: |
-          Write-Host "=== MSBuild ==="
+          Write-Host "Recherche de Microsoft.Windows.UI.Xaml.CSharp.targets..."
+
+          $target = Get-ChildItem `
+            -Path "$env:VS_PATH" `
+            -Filter "Microsoft.Windows.UI.Xaml.CSharp.targets" `
+            -Recurse `
+            -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+
+          if ($null -eq $target) {
+            Write-Host ""
+            Write-Host "ERREUR : outils UWP/XAML absents."
+            Write-Host ""
+
+            Write-Host "Composants Visual Studio :"
+
+            $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+
+            & $vswhere `
+              -latest `
+              -products * `
+              -property installationVersion
+
+            exit 1
+          }
+
+          Write-Host "Outil XAML trouvé :"
+          Write-Host $target.FullName
+
+      - name: Verify MSBuild
+        shell: powershell
+        run: |
+          Write-Host "MSBuild utilisé :"
           Get-Command msbuild
+
+          Write-Host ""
           msbuild -version
+
+      - name: Restore
+        shell: powershell
+        run: |
+          msbuild "$env:SOLUTION" `
+            /t:Restore `
+            /p:Configuration=$env:CONFIGURATION `
+            /p:Platform=$env:PLATFORM
+
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
       - name: Build ARM
         shell: powershell
         run: |
-          Write-Host "=== BUILD ==="
-          Write-Host "Solution      : $env:SOLUTION"
-          Write-Host "Configuration : $env:CONFIGURATION"
-          Write-Host "Platform      : $env:PLATFORM"
-
           msbuild "$env:SOLUTION" `
             /p:Configuration=$env:CONFIGURATION `
             /p:Platform=$env:PLATFORM `
@@ -104,9 +116,21 @@ jobs:
             /verbosity:minimal
 
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "Build échoué."
             exit $LASTEXITCODE
           }
+
+      - name: List packages
+        shell: powershell
+        run: |
+          if (!(Test-Path "$env:GITHUB_WORKSPACE\Packages")) {
+            Write-Error "Aucun dossier Packages généré."
+            exit 1
+          }
+
+          Get-ChildItem `
+            "$env:GITHUB_WORKSPACE\Packages" `
+            -Recurse |
+            Select-Object FullName, Length
 
       - name: Upload APPX
         uses: actions/upload-artifact@v4
